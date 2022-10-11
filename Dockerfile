@@ -1,56 +1,51 @@
-# Install dependencies only when needed
-FROM node:16-alpine AS deps
+# Install dependencies and rebuild the source code only when neededonly
+FROM node:16.17-alpine3.15 AS builder
+
 # Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
 RUN apk add --no-cache libc6-compat
-WORKDIR /app
 
-# Install dependencies based on the preferred package manager
-COPY package.json yarn.lock* package-lock.json* pnpm-lock.yaml* ./
-RUN \
-    if [ -f yarn.lock ]; then yarn set version berry && yarn --frozen-lockfile; \
-    elif [ -f package-lock.json ]; then npm ci; \
-    elif [ -f pnpm-lock.yaml ]; then yarn global add pnpm && pnpm i --frozen-lockfile; \
-    else echo "Lockfile not found." && exit 1; \
-    fi
-
-
-# Rebuild the source code only when needed
-FROM node:16-alpine AS builder
 WORKDIR /app
 COPY . .
 
-# Next.js collects completely anonymous telemetry data about general usage.
-# Learn more here: https://nextjs.org/telemetry
-# Uncomment the following line in case you want to disable telemetry during the build.
-# ENV NEXT_TELEMETRY_DISABLED 1
-
-RUN yarn build
-
-# If using npm comment out above and use below instead
-# RUN npm run build
+RUN cd /app && echo 'YARN VERSION IN BUILDER: ' && yarn --version
+# Note yarn rebuild - this is to let yarn rebuild binaries
+RUN yarn && yarn build
 
 # Production image, copy all the files and run next
-FROM node:16-alpine AS runner
-WORKDIR /app
+FROM node:alpine AS runner
+
+RUN addgroup -g 1001 -S nodejs
+RUN adduser -S nextjs -u 1001
 
 ENV NODE_ENV production
-# Uncomment the following line in case you want to disable telemetry during runtime.
-# ENV NEXT_TELEMETRY_DISABLED 1
+WORKDIR /app
 
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
-
+# You only need to copy next.config.js if you are NOT using the default configuration
+COPY --from=builder /app/next.config.js ./
 COPY --from=builder /app/public ./public
+COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/.yarn ./.yarn
+COPY --from=builder /app/yarn.lock ./yarn.lock
+COPY --from=builder /app/.yarnrc.yml ./.yarnrc.yml
+COPY --from=builder /app/.pnp.cjs ./.pnp.cjs
+COPY --from=builder /app/package.json ./package.json
 
-# Automatically leverage output traces to reduce image size
-# https://nextjs.org/docs/advanced-features/output-file-tracing
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+# The step below is from the Next.js Dockerfile example, but we don't need it because we use Yarn's Zero-installs.
+# COPY --from=builder /app/node_modules ./node_modules
+
+# Note yarn rebuild again - this is to let yarn rebuild binaries in the "runner" stage of the Dockerfile
+# We also have to remove unplugged, so that rebuilding happens and replaces the old binaries
+RUN rm -rf /app/.yarn/unplugged && yarn rebuild
+RUN chown -R nextjs:nodejs /app/.next
+RUN echo "YARN VERSION IN RUNNER: " && yarn --version
 
 USER nextjs
 
 EXPOSE 3000
 
-ENV PORT 3000
+# Next.js collects completely anonymous telemetry data about general usage.
+# Learn more here: https://nextjs.org/telemetry
+# Uncomment the following line in case you want to disable telemetry.
+ENV NEXT_TELEMETRY_DISABLED 1
 
-CMD ["node", "server.js"]
+CMD ["yarn", "start"]

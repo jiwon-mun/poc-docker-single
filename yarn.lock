@@ -127,6 +127,7 @@ __metadata:
 "@next/swc-linux-arm64-gnu@npm:12.3.1":
   version: 12.3.1
   resolution: "@next/swc-linux-arm64-gnu@npm:12.3.1"
+  checksum: 0aa80ad731ba2ec39fc45a0436941f972f5d22afcad1b0f472857eda8a0077e90e4afa04543b671740a4a8c4bdbea63b43adc1f24847cd78d05144088688824a
   conditions: os=linux & cpu=arm64 & libc=glibc
   languageName: node
   linkType: hard
@@ -1002,6 +1003,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "first-app@workspace:."
   dependencies:
+    "@next/swc-linux-arm64-gnu": 12.3.1
     eslint: 8.25.0
     eslint-config-next: 12.3.1
     next: 12.3.1
